@@ -1,14 +1,57 @@
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { put, del } from "@vercel/blob";
 
 /**
- * Lokasi penyimpanan bukti. Default `storage/uploads` di root proyek.
- * Set `STORAGE_DIR` bila ingin menaruh file di volume/disk terpisah
- * (mis. D:\sipena-storage) agar tidak ikut hilang saat aplikasi di-redeploy.
+ * Penyimpanan bukti ganda:
+ * - Produksi (ada BLOB_READ_WRITE_TOKEN): Vercel Blob (tahan redeploy, multi-server).
+ * - Dev lokal tanpa token: disk `storage/uploads` (Laragon).
  */
-export const UPLOAD_DIR = process.env.STORAGE_DIR
-  ? path.resolve(process.env.STORAGE_DIR)
-  : path.join(process.cwd(), "storage", "uploads");
+
+/** Simpan file; mengembalikan URL publik/relatif untuk diakses ulang. */
+export async function saveUpload(name: string, data: Buffer): Promise<string> {
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const blob = await put(name, data, {
+      access: "public",
+      addRandomSuffix: false,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+    return blob.url;
+  }
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  await writeFile(path.join(UPLOAD_DIR, name), data);
+  return `/api/files/${name}`;
+}
+
+/** Baca file dari Vercel Blob (jika URL absolut) atau dari disk lokal. */
+export async function readUpload(nameOrUrl: string): Promise<Buffer> {
+  if (/^https?:\/\//.test(nameOrUrl)) {
+    const res = await fetch(nameOrUrl);
+    if (!res.ok) {
+      throw Object.assign(new Error("File tidak ditemukan di penyimpanan."), { status: 404 });
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+  const safe = safeUploadName(nameOrUrl);
+  if (!safe) throw Object.assign(new Error("Nama file tidak valid."), { status: 400 });
+  return readFile(path.join(UPLOAD_DIR, safe));
+}
+
+/** Hapus file dari Vercel Blob (jika URL) atau disk lokal (jika nama saja). */
+export async function deleteUpload(nameOrUrl: string): Promise<boolean> {
+  try {
+    if (/^https?:\/\//.test(nameOrUrl)) {
+      await del(nameOrUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+      return true;
+    }
+    const safe = safeUploadName(nameOrUrl);
+    if (!safe) return false;
+    await unlink(path.join(UPLOAD_DIR, safe));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Nama file yang aman: tanpa folder, tanpa karakter aneh, tidak diawali titik. */
 export function safeUploadName(name: string): string | null {
@@ -16,32 +59,9 @@ export function safeUploadName(name: string): string | null {
   return /^[A-Za-z0-9._-]+$/.test(base) && !base.startsWith(".") ? base : null;
 }
 
-export async function saveUpload(name: string, data: Buffer) {
-  const safe = safeUploadName(name);
-  if (!safe) throw Object.assign(new Error("Nama file tidak valid."), { status: 400 });
-
-  await mkdir(UPLOAD_DIR, { recursive: true });
-  await writeFile(path.join(UPLOAD_DIR, safe), data);
-  return safe;
-}
-
-export async function readUpload(name: string): Promise<Buffer> {
-  const safe = safeUploadName(name);
-  if (!safe) throw Object.assign(new Error("Nama file tidak valid."), { status: 400 });
-  return readFile(path.join(UPLOAD_DIR, safe));
-}
-
-/** Hapus file; mengembalikan false bila file sudah tidak ada. */
-export async function deleteUpload(name: string): Promise<boolean> {
-  const safe = safeUploadName(name);
-  if (!safe) return false;
-  try {
-    await unlink(path.join(UPLOAD_DIR, safe));
-    return true;
-  } catch {
-    return false;
-  }
-}
+export const UPLOAD_DIR = process.env.STORAGE_DIR
+  ? path.resolve(process.env.STORAGE_DIR)
+  : path.join(process.cwd(), "storage", "uploads");
 
 /** Ambil nama file dari URL bukti `/api/files/<name>`; null bila bukan format itu. */
 export function uploadedFileName(url: string | null | undefined): string | null {
