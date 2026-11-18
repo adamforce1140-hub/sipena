@@ -45,9 +45,18 @@ export async function POST(req: Request) {
     await assertStaff();
     const body = customerSchema.parse(await req.json());
 
-    const existing = await prisma.customer.findUnique({ where: { cifNumber: body.cifNumber } });
-    if (existing) {
+    const [dupCif, dupNik] = await Promise.all([
+      prisma.customer.findUnique({ where: { cifNumber: body.cifNumber } }),
+      prisma.customer.findFirst({ where: { nik: body.nik } }),
+    ]);
+    if (dupCif) {
       return NextResponse.json({ error: `CIF ${body.cifNumber} sudah terdaftar.` }, { status: 409 });
+    }
+    if (dupNik) {
+      return NextResponse.json(
+        { error: `NIK ${body.nik} sudah terdaftar atas nama ${dupNik.fullName}.` },
+        { status: 409 }
+      );
     }
 
     const customer = await prisma.customer.create({
