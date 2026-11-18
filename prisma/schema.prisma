@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STAFF
+  SUPERVISOR
+}
+
+enum CaseStatus {
+  DRAFT
+  ACTIVE
+  PENDING_SOLUTION
+  IN_EXECUTION
+  PENDING_CLOSURE
+  CLOSED
+}
+
+enum Collectibility {
+  KOL_3
+  KOL_4
+  KOL_5
+}
+
+enum ActivityType {
+  CALL
+  WHATSAPP
+  VISIT
+}
+
+enum SolutionType {
+  RESTRUCTURE
+  PENALTY_WAIVER
+  WARNING_LETTER_SP1
+  WARNING_LETTER_SP2
+  WARNING_LETTER_SP3
+  COLLATERAL_EXECUTION
+  WRITE_OFF
+}
+
+enum GateStep {
+  GATE_1_VERIFY
+  GATE_2_SOLUTION
+  GATE_3_CLOSE
+}
+
+enum SolutionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GateDecision {
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  PTP_TODAY
+  PTP_OVERDUE
+  NEEDS_REVISION
+  GATE_READY
+  WORK_QUEUE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @db.Text
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  collectionLogs CollectionLog[]
+  solutions      CaseSolution[]   @relation("ProposedSolutions")
+  reviewedSols   CaseSolution[]   @relation("ReviewedSolutions")
+  payments       CasePayment[]
+  gateActions    SupervisorGate[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+}
+
+model Customer {
+  id               String      @id @default(cuid())
+  cifNumber        String      @unique
+  fullName         String
+  nik              String
+  phone            String
+  emergencyContact String?
+  address          String      @db.Text
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  financings       Financing[]
+}
+
+model Financing {
+  id                 String         @id @default(cuid())
+  customerId         String
+  customer           Customer       @relation(fields: [customerId], references: [id])
+  contractNumber     String         @unique
+  productType        String
+  principalAmount    Decimal        @db.Decimal(18, 2)
+  outstandingBalance Decimal        @db.Decimal(18, 2)
+  arrearsMargin      Decimal        @db.Decimal(18, 2)
+  penaltyAmount      Decimal        @db.Decimal(18, 2)
+  dpd                Int
+  collectibility     Collectibility
+  collateralType     String?
+  collateralValue    Decimal?       @db.Decimal(18, 2)
+  caseStatus         CaseStatus     @default(DRAFT)
+  isLocked           Boolean        @default(false)
+  // True bila Supervisor mengembalikan kasus dan menunggu revisi Staf.
+  // Kasus dengan nilai true tidak lagi masuk antrean tindakan Supervisor.
+  needsRevision      Boolean        @default(false)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  collectionLogs CollectionLog[]
+  solutions      CaseSolution[]
+  payments       CasePayment[]
+  gateHistory    SupervisorGate[]
+
+  // Index untuk query dashboard/daftar kasus yang paling sering dipakai.
+  @@index([caseStatus, needsRevision, updatedAt])
+  @@index([collectibility])
+}
+
+model CollectionLog {
+  id           String       @id @default(cuid())
+  financingId  String
+  staffId      String
+  activityType ActivityType
+  notes        String       @db.Text
+  ptpDate      DateTime?
+  ptpAmount    Decimal?     @db.Decimal(18, 2)
+  evidenceUrl  String?
+  createdAt    DateTime     @default(now())
+
+  financing Financing @relation(fields: [financingId], references: [id])
+  staff     User      @relation(fields: [staffId], references: [id])
+
+  // Dipakai kartu "PTP jatuh tempo hari ini".
+  @@index([ptpDate])
+}
+
+model CaseSolution {
+  id              String         @id @default(cuid())
+  financingId     String
+  proposedById    String
+  solutionType    SolutionType
+  proposalSummary String         @db.Text
+  proposedAmount  Decimal?       @db.Decimal(18, 2)
+  supportingUrl   String?
+  status          SolutionStatus @default(PENDING)
+  reviewedById    String?
+  reviewedBy      User?          @relation("ReviewedSolutions", fields: [reviewedById], references: [id])
+  supervisorNotes String?
+  reviewedAt      DateTime?
+  createdAt       DateTime       @default(now())
+
+  financing  Financing @relation(fields: [financingId], references: [id])
+  proposedBy User      @relation("ProposedSolutions", fields: [proposedById], references: [id])
+}
+
+model CasePayment {
+  id               String   @id @default(cuid())
+  financingId      String
+  uploadedById     String
+  paymentAmount    Decimal  @db.Decimal(18, 2)
+  // Alokasi pembayaran berdasarkan prinsip syariah.
+  principalPortion Decimal  @default(0) @db.Decimal(18, 2)
+  marginPortion    Decimal  @default(0) @db.Decimal(18, 2)
+  // Ta'zir (denda syariah) tidak menjadi pendapatan bank; disalurkan ke dana kebajikan.
+  penaltyPortion   Decimal  @default(0) @db.Decimal(18, 2)
+  paymentDate      DateTime
+  receiptUrl       String
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  financing  Financing @relation(fields: [financingId], references: [id])
+  uploadedBy User      @relation(fields: [uploadedById], references: [id])
+}
+
+model SupervisorGate {
+  id           String       @id @default(cuid())
+  financingId  String
+  supervisorId String
+  gateStep     GateStep
+  decision     GateDecision
+  notes        String?
+  createdAt    DateTime     @default(now())
+
+  financing  Financing @relation(fields: [financingId], references: [id])
+  supervisor User      @relation(fields: [supervisorId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  oldData   Json?
+  newData   Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  // Audit trail selalu dibaca urut waktu terbaru.
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  link      String?
+  // Kunci unik agar pengingat yang sama tidak dibuat berulang setiap kali job berjalan.
+  dedupeKey String           @unique
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Lonceng notifikasi selalu membaca milik satu user, terbaru, dan status belum dibaca.
+  @@index([userId, readAt, createdAt])
+}

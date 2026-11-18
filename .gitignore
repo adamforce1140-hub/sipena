@@ -26,7 +26,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
 .env*.local
+
+# hasil backup & file bukti upload (jangan masuk repository)
+/backups/
+/storage/
 
 # vercel
 .vercel
