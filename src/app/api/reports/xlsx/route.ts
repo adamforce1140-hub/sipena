@@ -69,11 +69,18 @@ export async function GET(req: Request) {
       { wch: 13 },
     ];
 
+    const lastRef = sheet["!ref"];
+    if (lastRef) {
+      sheet["!autofilter"] = { ref: lastRef };
+    }
+    // Margin sempit agar tabel muat di A4 landscape tanpa halaman tambahan.
+    sheet["!margins"] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.25, footer: 0.25 };
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Rekap NPF");
 
     const info = XLSX.utils.aoa_to_sheet([
-      ["PT BANK PEMBIAYAAN RAKYAT SYARIAH BANGKA BELITUNG MANDIRI"],
+      ["PT Bank Perekonomian Rakyat Syariah BANGKA BELITUNG"],
       ["Sistem Informasi Penanganan Pembiayaan Bermasalah (SIPENA)"],
       [],
       ["LAPORAN REKAPITULASI NPF (NON PERFORMING FINANCING)"],
@@ -87,7 +94,8 @@ export async function GET(req: Request) {
       [],
       ["Catatan Syariah", SHARIAH_TERM.penaltyNote],
     ]);
-    info["!cols"] = [{ wch: 18 }, { wch: 60 }, { wch: 10 }, { wch: 60 }];
+    info["!cols"] = [{ wch: 18 }, { wch: 60 }];
+    info["!margins"] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.25, footer: 0.25 };
     info["A1"].s = { font: { bold: true, sz: 14 } };
     info["A4"].s = { font: { bold: true, sz: 12 } };
     for (const cell of ["A2", "A7", "A8", "A9", "A10", "A13"]) {

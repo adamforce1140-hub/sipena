@@ -19,82 +19,91 @@ const BANK = {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 42,
-    paddingBottom: 58,
-    paddingHorizontal: 50,
-    fontSize: 10,
+    paddingTop: 34,
+    paddingBottom: 48,
+    paddingHorizontal: 54,
+    fontSize: 9.5,
     fontFamily: "Helvetica",
-    color: "#111827",
-    lineHeight: 1.45,
+    color: "#1f2937",
+    lineHeight: 1.4,
   },
   letterhead: {
-    borderBottomWidth: 3,
-    borderBottomColor: "#b45309",
-    paddingBottom: 10,
-    marginBottom: 18,
+    borderBottomWidth: 2,
+    borderBottomColor: BRAND,
+    paddingBottom: 8,
+    marginBottom: 14,
     alignItems: "center",
   },
-  brand: { fontSize: 13, fontFamily: "Helvetica-Bold", color: "#111827", textAlign: "center" },
+  brand: { fontSize: 12.5, fontFamily: "Helvetica-Bold", color: "#111827", textAlign: "center" },
   brandAccent: { color: BRAND, fontFamily: "Helvetica-Bold" },
   brandSub: { fontSize: 7.5, color: "#4b5563", marginTop: 2, textAlign: "center" },
-  title: { fontSize: 13, fontFamily: "Helvetica-Bold", textAlign: "center" },
-  subtitle: { fontSize: 9.5, textAlign: "center", marginTop: 2 },
+  title: { fontSize: 12.5, fontFamily: "Helvetica-Bold", color: BRAND, textAlign: "center" },
+  subtitle: { fontSize: 9, textAlign: "center", marginTop: 2, color: "#374151" },
   rule: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#111827",
-    width: "52%",
-    alignSelf: "center",
-    marginTop: 4,
-    marginBottom: 14,
+    borderBottomWidth: 0.75,
+    borderBottomColor: "#9ca3af",
+    width: "100%",
+    marginTop: 6,
+    marginBottom: 12,
   },
-  paragraph: { marginBottom: 8, textAlign: "justify" },
+  paragraph: { marginBottom: 7, textAlign: "justify" },
   row: { flexDirection: "row", marginBottom: 2.5 },
   label: { width: 130, color: "#4b5563" },
   value: { flex: 1 },
-  sectionTitle: { fontFamily: "Helvetica-Bold", marginTop: 10, marginBottom: 4 },
-  table: { borderWidth: 1, borderColor: "#d1d5db", marginTop: 6, marginBottom: 10 },
-  tableRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: "#e5e7eb" },
-  tableHead: { backgroundColor: "#f3f4f6", borderTopWidth: 0 },
-  cell: { padding: 4.5, fontSize: 9 },
-  cellHead: { fontFamily: "Helvetica-Bold" },
-  signRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 26 },
+  sectionTitle: { fontFamily: "Helvetica-Bold", color: BRAND, marginTop: 8, marginBottom: 3 },
+  table: { borderWidth: 0.75, borderColor: "#9ca3af", marginTop: 4, marginBottom: 8 },
+  tableRow: { flexDirection: "row", borderTopWidth: 0.5, borderTopColor: "#d1d5db" },
+  tableHead: { backgroundColor: "#e6eee8", borderTopWidth: 0 },
+  cell: { padding: 3.5, fontSize: 8.5 },
+  cellHead: { fontFamily: "Helvetica-Bold", color: BRAND },
+  signRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 },
   signBox: { width: "44%", alignItems: "center" },
-  signDate: { fontSize: 9.5, marginBottom: 44 },
+  signDate: { fontSize: 9, marginBottom: 40 },
   signName: {
-    borderTopWidth: 1,
+    borderTopWidth: 0.75,
     borderTopColor: "#111827",
     paddingTop: 3,
     width: "100%",
     textAlign: "center",
-    fontSize: 9.5,
+    fontSize: 9,
     fontFamily: "Helvetica-Bold",
   },
-  signRole: { fontSize: 8.5, color: "#4b5563", marginTop: 1 },
+  signRole: { fontSize: 8, color: "#4b5563", marginTop: 1 },
   footer: {
     position: "absolute",
-    bottom: 24,
-    left: 50,
-    right: 50,
-    fontSize: 7.5,
+    bottom: 22,
+    left: 54,
+    right: 54,
+    fontSize: 7,
     color: "#6b7280",
     textAlign: "center",
   },
   note: {
-    marginTop: 10,
-    padding: 7,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    marginTop: 8,
+    padding: 6,
+    backgroundColor: "#f5f7f5",
+    borderLeftWidth: 2,
+    borderLeftColor: BRAND,
     fontSize: 8.5,
     color: "#374151",
   },
   reportPage: {
-    paddingTop: 28,
-    paddingBottom: 30,
-    paddingHorizontal: 26,
+    paddingTop: 22,
+    paddingBottom: 32,
+    paddingHorizontal: 22,
     fontSize: 8,
     fontFamily: "Helvetica",
-    color: "#111827",
+    color: "#1f2937",
+  },
+  reportFooter: {
+    position: "absolute",
+    bottom: 14,
+    left: 22,
+    right: 22,
+    fontSize: 7,
+    color: "#6b7280",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
 });
 
@@ -500,28 +509,31 @@ function ReportDocument({
   return (
     <Document title="Laporan Rekapitulasi NPF" author="SIPENA" subject="Rekapitulasi NPF">
       <Page size="A4" orientation="landscape" style={styles.reportPage}>
-        <View style={styles.letterhead}>
-          <Text style={styles.brand}>SIPENA — Laporan Rekapitulasi NPF</Text>
+        <View style={[styles.letterhead, { marginBottom: 8 }]}>
+          <Text style={styles.brand}>
+            {BANK.name} <Text style={styles.brandAccent}>{BANK.nameBold}</Text>
+          </Text>
+          <Text style={styles.brandSub}>Laporan Rekapitulasi NPF (Non Performing Financing) · SIPENA</Text>
           <Text style={styles.brandSub}>
             Dicetak {formatLongDate(now)} oleh {generatedBy} · Filter: {filterLabel}
           </Text>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
-          <Text style={{ flex: 1, fontFamily: "Helvetica-Bold" }}>Jumlah Kasus: {rows.length}</Text>
-          <Text style={{ flex: 1, fontFamily: "Helvetica-Bold" }}>
+        <View style={{ flexDirection: "row", marginBottom: 8, borderWidth: 0.75, borderColor: "#9ca3af" }}>
+          <Text style={[styles.cell, { flex: 1, fontFamily: "Helvetica-Bold" }]}>Jumlah Kasus: {rows.length}</Text>
+          <Text style={[styles.cell, { flex: 1.4, fontFamily: "Helvetica-Bold" }]}>
             Total {SHARIAH_TERM.outstanding}: {formatRupiah(totalOutstanding)}
           </Text>
-          <Text style={{ flex: 1, fontFamily: "Helvetica-Bold" }}>
+          <Text style={[styles.cell, { flex: 1.4, fontFamily: "Helvetica-Bold" }]}>
             Total Tunggakan Margin: {formatRupiah(totalTunggakan)}
           </Text>
-          <Text style={{ flex: 1, fontFamily: "Helvetica-Bold" }}>
+          <Text style={[styles.cell, { flex: 1.2, fontFamily: "Helvetica-Bold" }]}>
             {"Total Ta'zir: "}{formatRupiah(totalTazir)}
           </Text>
         </View>
 
         <View style={styles.table}>
-          <View style={[styles.tableRow, styles.tableHead]}>
+          <View style={[styles.tableRow, styles.tableHead]} fixed>
             <Text style={[styles.cell, styles.cellHead, { flex: 0.4 }]}>No</Text>
             <Text style={[styles.cell, styles.cellHead, { flex: 1.2 }]}>CIF</Text>
             <Text style={[styles.cell, styles.cellHead, { flex: 2.2 }]}>Nama Nasabah</Text>
@@ -564,7 +576,10 @@ function ReportDocument({
           )}
         </View>
 
-        <Text style={styles.footer}>SIPENA · Laporan dihasilkan otomatis pada {formatShortDate(now)}</Text>
+        <View style={styles.reportFooter} fixed>
+          <Text>SIPENA · Laporan dihasilkan otomatis pada {formatShortDate(now)}</Text>
+          <Text render={({ pageNumber, totalPages }) => `Halaman ${pageNumber} dari ${totalPages}`} />
+        </View>
       </Page>
     </Document>
   );
