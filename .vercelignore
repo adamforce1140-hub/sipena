@@ -1,0 +1,13 @@
+node_modules
+build
+dist
+.git
+.trae
+.log
+.figma
+
+# rahasia & data lokal (jangan pernah ikut ke deployment)
+.env
+.env*.local
+backups
+storage
