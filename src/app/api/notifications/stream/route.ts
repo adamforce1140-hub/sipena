@@ -5,10 +5,16 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/notifications/stream — Server-Sent Events untuk notifikasi real-time.
- * Server memeriksa basis data tiap 3 detik dan hanya mengirim pesan ketika
+ * Server memeriksa basis data secara berkala dan hanya mengirim pesan ketika
  * jumlah notifikasi belum dibaca berubah, sehingga lonceng dan dropdown
  * diperbarui tanpa menunggu polling dari browser.
+ *
+ * Interval 15 detik (bukan 3 detik) karena database berada di Sydney: setiap
+ * pemeriksaan memakan satu perjalanan pulang-pergi (~250 ms). Interval pendek
+ * membuat banyak tab/perangkat menghabiskan kuota koneksi dan memicu error
+ * "Can't reach database server".
  */
+const TICK_MS = 15_000;
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -43,7 +49,7 @@ export async function GET(req: Request) {
         }
       };
 
-      const interval = setInterval(tick, 3_000);
+      const interval = setInterval(tick, TICK_MS);
       const cleanup = () => {
         if (closed) return;
         closed = true;
