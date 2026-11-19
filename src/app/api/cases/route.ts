@@ -4,34 +4,52 @@ import { prisma } from "@/lib/prisma";
 import { assertStaff } from "@/lib/guards";
 import { handleApiError } from "@/lib/api-response";
 import { isShariahProduct } from "@/lib/shariah";
+import { PLACEHOLDER_CIF_PREFIX } from "@/lib/case-completeness";
 import { CaseStatus, Collectibility } from "@prisma/client";
 
+/**
+ * Staf lapangan sering mengirim kasus lebih dulu, lalu melengkapi data
+ * administrasi belakangan. Karena itu hanya Nomor Akad & Nama yang wajib;
+ * field lain opsional dan diberi nilai aman. Kelengkapan data ditampilkan
+ * ke Supervisor sebagai checklist, bukan dijadikan penghalang pengiriman.
+ */
 const createCaseSchema = z
   .object({
     // Nasabah (boleh dibuat baru dalam form yang sama)
-    cifNumber: z.string().min(1, "Nomor CIF wajib diisi"),
-    fullName: z.string().min(1, "Nama lengkap wajib diisi"),
-    nik: z.string().min(1, "NIK wajib diisi"),
-    phone: z.string().min(1, "Nomor telepon wajib diisi"),
-    emergencyContact: z.string().optional().nullable(),
-    address: z.string().min(1, "Alamat wajib diisi"),
+    cifNumber: z.string().trim().optional().nullable(),
+    fullName: z.string().trim().min(1, "Nama lengkap wajib diisi"),
+    nik: z.string().trim().optional().nullable(),
+    phone: z.string().trim().optional().nullable(),
+    emergencyContact: z.string().trim().optional().nullable(),
+    address: z.string().trim().optional().nullable(),
     // Pembiayaan
-    contractNumber: z.string().min(1, "Nomor akad wajib diisi"),
+    contractNumber: z.string().trim().min(1, "Nomor akad wajib diisi"),
     productType: z
       .string()
-      .min(1, "Akad pembiayaan wajib diisi")
-      .refine(isShariahProduct, "Akad pembiayaan harus dipilih dari daftar akad syariah"),
-    principalAmount: z.coerce.number().positive("Plafon pembiayaan harus lebih dari 0"),
-    outstandingBalance: z.coerce.number().min(0, "Sisa kewajiban pokok tidak boleh negatif"),
-    arrearsMargin: z.coerce.number().min(0, "Tunggakan margin tidak boleh negatif"),
-    penaltyAmount: z.coerce.number().min(0, "Ta'zir tidak boleh negatif"),
-    dpd: z.coerce.number().int().min(0, "DPD tidak boleh negatif"),
-    collectibility: z.nativeEnum(Collectibility, { message: "Kolektibilitas tidak valid" }),
-    collateralType: z.string().optional().nullable(),
+      .trim()
+      .optional()
+      .nullable()
+      .refine(
+        (v) => !v || isShariahProduct(v),
+        "Akad pembiayaan harus dipilih dari daftar akad syariah"
+      ),
+    principalAmount: z.coerce.number().min(0, "Plafon pembiayaan tidak boleh negatif").optional(),
+    outstandingBalance: z.coerce
+      .number()
+      .min(0, "Sisa kewajiban pokok tidak boleh negatif")
+      .optional(),
+    arrearsMargin: z.coerce.number().min(0, "Tunggakan margin tidak boleh negatif").optional(),
+    penaltyAmount: z.coerce.number().min(0, "Ta'zir tidak boleh negatif").optional(),
+    dpd: z.coerce.number().int().min(0, "DPD tidak boleh negatif").optional(),
+    collectibility: z
+      .nativeEnum(Collectibility, { message: "Kolektibilitas tidak valid" })
+      .optional(),
+    collateralType: z.string().trim().optional().nullable(),
     collateralValue: z.coerce.number().min(0).optional().nullable(),
   })
-  // Sisa kewajiban tidak mungkin melebihi plafon yang disepakati dalam akad.
-  .refine((d) => d.outstandingBalance <= d.principalAmount, {
+  // Sisa kewajiban tidak mungkin melebihi plafon — hanya dicek bila plafon
+  // sudah diisi, agar pengiriman data belum lengkap tidak ikut terblokir.
+  .refine((d) => !d.principalAmount || (d.outstandingBalance ?? 0) <= d.principalAmount, {
     message: "Sisa kewajiban pokok tidak boleh melebihi plafon pembiayaan",
     path: ["outstandingBalance"],
   });
@@ -88,12 +106,18 @@ export async function POST(req: Request) {
     const session = await assertStaff();
     const body = createCaseSchema.parse(await req.json());
 
-    const dupCif = await prisma.customer.findUnique({ where: { cifNumber: body.cifNumber } });
-    if (dupCif) {
-      return NextResponse.json(
-        { error: `CIF ${body.cifNumber} sudah terdaftar. Gunakan fitur edit untuk menambahkan kasus baru.` },
-        { status: 409 }
-      );
+    // CIF boleh kosong saat pengiriman awal — pakai penanda sementara agar
+    // Supervisor melihat bahwa data ini masih perlu dilengkapi Staf.
+    const cifNumber = body.cifNumber?.trim() || `${PLACEHOLDER_CIF_PREFIX}${Date.now()}`;
+
+    if (body.cifNumber?.trim()) {
+      const dupCif = await prisma.customer.findUnique({ where: { cifNumber } });
+      if (dupCif) {
+        return NextResponse.json(
+          { error: `CIF ${cifNumber} sudah terdaftar. Gunakan fitur edit untuk menambahkan kasus baru.` },
+          { status: 409 }
+        );
+      }
     }
 
     const dupContract = await prisma.financing.findUnique({
@@ -106,24 +130,25 @@ export async function POST(req: Request) {
     const financing = await prisma.financing.create({
       data: {
         contractNumber: body.contractNumber,
-        productType: body.productType,
-        principalAmount: body.principalAmount,
-        outstandingBalance: body.outstandingBalance,
-        arrearsMargin: body.arrearsMargin,
-        penaltyAmount: body.penaltyAmount,
-        dpd: body.dpd,
-        collectibility: body.collectibility,
-        collateralType: body.collateralType || null,
+        // Nilai aman untuk kolom wajib di database saat data belum lengkap.
+        productType: body.productType?.trim() || "",
+        principalAmount: body.principalAmount ?? 0,
+        outstandingBalance: body.outstandingBalance ?? 0,
+        arrearsMargin: body.arrearsMargin ?? 0,
+        penaltyAmount: body.penaltyAmount ?? 0,
+        dpd: body.dpd ?? 0,
+        collectibility: body.collectibility ?? Collectibility.KOL_3,
+        collateralType: body.collateralType?.trim() || null,
         collateralValue: body.collateralValue ?? null,
         caseStatus: CaseStatus.DRAFT,
         customer: {
           create: {
-            cifNumber: body.cifNumber,
+            cifNumber,
             fullName: body.fullName,
-            nik: body.nik,
-            phone: body.phone,
-            emergencyContact: body.emergencyContact || null,
-            address: body.address,
+            nik: body.nik?.trim() || "-",
+            phone: body.phone?.trim() || "-",
+            emergencyContact: body.emergencyContact?.trim() || null,
+            address: body.address?.trim() || "-",
           },
         },
       },
@@ -138,7 +163,7 @@ export async function POST(req: Request) {
         entityId: financing.id,
         newData: {
           contractNumber: financing.contractNumber,
-          cifNumber: body.cifNumber,
+          cifNumber,
           caseStatus: CaseStatus.DRAFT,
         },
       },

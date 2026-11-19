@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
 import { UsersTable } from "./users-table";
+import { NewUserForm } from "./new-user-form";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export default async function UsersPage() {
           aktivitasnya tetap tersimpan.
         </p>
       </div>
+
+      <NewUserForm />
 
       <UsersTable
         currentUserId={session!.user.id}

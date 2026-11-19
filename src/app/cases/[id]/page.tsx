@@ -6,6 +6,8 @@ import { AppShell } from "@/components/app-shell";
 import { StatusStepper } from "@/components/status-stepper";
 import { StatusBadge, CollectibilityBadge, formatRupiah } from "@/lib/ui";
 import { productLabel, SHARIAH_TERM } from "@/lib/shariah";
+import { checkCaseCompleteness } from "@/lib/case-completeness";
+import { CaseCompletenessPanel } from "@/components/case-completeness-panel";
 import { CaseDetailClient } from "./case-detail-client";
 import type { SerializedCase } from "./types";
 
@@ -88,6 +90,20 @@ export default async function CaseDetailPage({
   // Ta'zir tidak dijumlahkan ke kewajiban pokok+margin karena bukan pendapatan bank.
   const totalKewajiban = data.outstandingBalance + data.arrearsMargin;
 
+  const completeness = checkCaseCompleteness({
+    customer: {
+      cifNumber: data.customer.cifNumber,
+      fullName: data.customer.fullName,
+      nik: data.customer.nik,
+      phone: data.customer.phone,
+      address: data.customer.address,
+    },
+    productType: data.productType,
+    principalAmount: data.principalAmount,
+    outstandingBalance: data.outstandingBalance,
+    collateralType: data.collateralType,
+  });
+
   return (
     <AppShell active="cases">
       <div className="mb-4">
@@ -143,6 +159,18 @@ export default async function CaseDetailPage({
         <div className="mt-4 border-t pt-4">
           <StatusStepper current={data.caseStatus} />
         </div>
+      </div>
+
+      <div className="mb-5">
+        <CaseCompletenessPanel
+          result={completeness}
+          editHref={`/cases/${data.id}/edit`}
+          showEditLink={
+            role === "STAFF" &&
+            !data.isLocked &&
+            (data.caseStatus === "DRAFT" || data.needsRevision)
+          }
+        />
       </div>
 
       <CaseDetailClient data={data} role={role} initialTab={searchParams.tab} />

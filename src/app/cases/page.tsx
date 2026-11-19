@@ -248,19 +248,28 @@ export default async function CasesPage({
               <th className="px-3 py-2 text-right">DPD</th>
               <th className="px-3 py-2">Aktivitas</th>
               <th className="px-3 py-2">Diperbarui</th>
+              <th className="px-3 py-2">Aksi</th>
             </tr>
           </thead>
           <tbody>
             {cases.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-gray-500">
+                <td colSpan={9} className="px-3 py-10 text-center text-gray-500">
                   Tidak ada kasus yang cocok dengan filter.
                 </td>
               </tr>
             )}
             {cases.map((c) => (
               <tr key={c.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2 font-mono text-xs">{c.contractNumber}</td>
+                <td className="px-3 py-2 font-mono text-xs">
+                  <Link
+                    href={`/cases/${c.id}`}
+                    className="text-blue-700 hover:underline"
+                    title="Buka detail kasus"
+                  >
+                    {c.contractNumber}
+                  </Link>
+                </td>
                 <td className="px-3 py-2">
                   <Link href={`/cases/${c.id}`} className="font-medium text-blue-700 hover:underline">
                     {c.customer.fullName}
@@ -269,16 +278,32 @@ export default async function CasesPage({
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={c.caseStatus} />
+                    <Link
+                      href={`/cases?status=${c.caseStatus}`}
+                      title={`Tampilkan semua kasus berstatus ${STATUS_LABEL[c.caseStatus]}`}
+                      className="hover:opacity-80"
+                    >
+                      <StatusBadge status={c.caseStatus} />
+                    </Link>
                     {c.needsRevision && (
-                      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                      <Link
+                        href="/cases?revisi=1"
+                        className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-200"
+                        title="Tampilkan semua kasus yang menunggu revisi"
+                      >
                         Menunggu revisi
-                      </span>
+                      </Link>
                     )}
                   </div>
                 </td>
                 <td className="px-3 py-2">
-                  <CollectibilityBadge value={c.collectibility} />
+                  <Link
+                    href={`/cases?collectibility=${c.collectibility}`}
+                    title={`Tampilkan semua kasus ${c.collectibility.replace("KOL_", "KOL ")}`}
+                    className="inline-block hover:opacity-80"
+                  >
+                    <CollectibilityBadge value={c.collectibility} />
+                  </Link>
                 </td>
                 <td className="px-3 py-2 text-right">{formatRupiah(Number(c.outstandingBalance))}</td>
                 <td className="px-3 py-2 text-right">{c.dpd}</td>
@@ -286,6 +311,53 @@ export default async function CasesPage({
                   {c._count.collectionLogs} log · {c._count.solutions} solusi · {c._count.payments} bayar
                 </td>
                 <td className="px-3 py-2 text-xs text-gray-500">{formatDate(c.updatedAt)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {c.needsRevision ? (
+                      <Link
+                        href={`/cases/${c.id}/edit`}
+                        className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                      >
+                        Revisi Kasus
+                      </Link>
+                    ) : (
+                      <>
+                        {(c.caseStatus === "ACTIVE" || c.caseStatus === "IN_EXECUTION") && (
+                          <Link
+                            href={`/cases/${c.id}?tab=collection`}
+                            className="rounded border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                          >
+                            + Log Penagihan
+                          </Link>
+                        )}
+                        {c.caseStatus === "ACTIVE" && (
+                          <Link
+                            href={`/cases/${c.id}?tab=solution`}
+                            className="rounded border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                          >
+                            + Ajukan Solusi
+                          </Link>
+                        )}
+                        {c.caseStatus === "IN_EXECUTION" && (
+                          <Link
+                            href={`/cases/${c.id}?tab=payment`}
+                            className="rounded border border-green-300 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-50"
+                          >
+                            + Bayar
+                          </Link>
+                        )}
+                        {c.caseStatus !== "ACTIVE" && c.caseStatus !== "IN_EXECUTION" && (
+                          <Link
+                            href={`/cases/${c.id}`}
+                            className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            Tinjau
+                          </Link>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

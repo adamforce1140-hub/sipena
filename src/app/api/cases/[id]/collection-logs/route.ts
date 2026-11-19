@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertStaff, assertCaseNotLocked } from "@/lib/guards";
 import { handleApiError } from "@/lib/api-response";
-import { assertStatus, COLLECTION_LOG_ALLOWED, TransitionError } from "@/lib/state-machine";
+import { assertStatus, COLLECTION_LOG_ALLOWED } from "@/lib/state-machine";
 import { ActivityType } from "@prisma/client";
 
 const schema = z
@@ -43,18 +43,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const financing = await prisma.financing.findUnique({
       where: { id: params.id },
-      select: { id: true, caseStatus: true, contractNumber: true, needsRevision: true },
+      select: { id: true, caseStatus: true, contractNumber: true },
     });
     if (!financing) {
       return NextResponse.json({ error: "Kasus tidak ditemukan." }, { status: 404 });
     }
-    // Kasus yang dikembalikan Supervisor harus direvisi dulu, bukan ditagih lagi,
-    // agar flag needsRevision tidak menggantung tanpa perbaikan.
-    if (financing.needsRevision) {
-      throw new TransitionError(
-        "Kasus sedang menunggu revisi Staf. Simpan perbaikan data terlebih dahulu sebelum mencatat penagihan."
-      );
-    }
+    // Kasus yang dikembalikan Supervisor tetap boleh dicatat penagihannya —
+    // Staf tidak perlu menunggu revisi selesai agar aktivitas lapangan tidak hilang.
     assertStatus(financing.caseStatus, COLLECTION_LOG_ALLOWED, "Catat Penagihan");
 
     const log = await prisma.collectionLog.create({

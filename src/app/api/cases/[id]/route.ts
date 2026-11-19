@@ -65,6 +65,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 const updateSchema = z.object({
+  cifNumber: z.string().trim().min(1).optional(),
   fullName: z.string().min(1).optional(),
   nik: z.string().min(1).optional(),
   phone: z.string().min(1).optional(),
@@ -72,9 +73,12 @@ const updateSchema = z.object({
   address: z.string().min(1).optional(),
   productType: z
     .string()
-    .min(1)
-    .refine(isShariahProduct, "Akad pembiayaan harus dipilih dari daftar akad syariah")
-    .optional(),
+    .trim()
+    .optional()
+    .refine(
+      (v) => !v || isShariahProduct(v),
+      "Akad pembiayaan harus dipilih dari daftar akad syariah"
+    ),
   principalAmount: z.coerce.number().positive().optional(),
   outstandingBalance: z.coerce.number().min(0).optional(),
   arrearsMargin: z.coerce.number().min(0).optional(),
@@ -104,6 +108,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
     assertCanRevise(current.caseStatus, current.needsRevision);
 
+    // Nomor CIF boleh dilengkapi Staf menyusul — pastikan tidak bentrok.
+    if (body.cifNumber && body.cifNumber !== current.customer.cifNumber) {
+      const dupCif = await prisma.customer.findUnique({ where: { cifNumber: body.cifNumber } });
+      if (dupCif) {
+        return NextResponse.json(
+          { error: `CIF ${body.cifNumber} sudah terdaftar pada nasabah lain.` },
+          { status: 409 }
+        );
+      }
+    }
+
     // Sisa kewajiban tidak boleh melebihi plafon, termasuk setelah perubahan parsial.
     const effectivePrincipal = body.principalAmount ?? Number(current.principalAmount);
     const effectiveOutstanding = body.outstandingBalance ?? Number(current.outstandingBalance);
@@ -115,6 +130,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     const customerFields = {
+      cifNumber: body.cifNumber,
       fullName: body.fullName,
       nik: body.nik,
       phone: body.phone,

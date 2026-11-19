@@ -328,19 +328,25 @@ export default async function DashboardPage() {
           <ul className="space-y-4">
             {collectibilityRows.map((r) => (
               <li key={r.key}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <CollectibilityBadge value={r.key} />
-                    <span className="text-gray-500">{r.count} kasus</span>
+                <Link
+                  href={`/cases?collectibility=${r.key}`}
+                  className="block rounded px-1 py-1 hover:bg-gray-50"
+                  title={`Buka daftar kasus ${r.key.replace("KOL_", "KOL ")}`}
+                >
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <CollectibilityBadge value={r.key} />
+                      <span className="text-gray-500">{r.count} kasus</span>
+                    </div>
+                    <span className="font-medium">{formatRupiah(r.outstanding)}</span>
                   </div>
-                  <span className="font-medium">{formatRupiah(r.outstanding)}</span>
-                </div>
-                <div className="h-2 w-full rounded bg-gray-100">
-                  <div
-                    className="h-2 rounded bg-blue-600"
-                    style={{ width: `${(r.count / maxCount) * 100}%` }}
-                  />
-                </div>
+                  <div className="h-2 w-full rounded bg-gray-100">
+                    <div
+                      className="h-2 rounded bg-blue-600"
+                      style={{ width: `${(r.count / maxCount) * 100}%` }}
+                    />
+                  </div>
+                </Link>
               </li>
             ))}
           </ul>

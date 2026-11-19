@@ -48,19 +48,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           outstandingBalance: true,
           arrearsMargin: true,
           penaltyAmount: true,
-          needsRevision: true,
         },
       });
       if (!financing) {
         throw Object.assign(new Error("Kasus tidak ditemukan."), { status: 404 });
       }
-      // Kasus yang dikembalikan Supervisor harus direvisi dulu; mencatat pembayaran
-      // akan mereset flag revisi tanpa perbaikan data.
-      if (financing.needsRevision) {
-        throw new TransitionError(
-          "Kasus sedang menunggu revisi Staf. Simpan perbaikan data terlebih dahulu sebelum mencatat pembayaran."
-        );
-      }
+      // Pembayaran tetap boleh dicatat walau kasus sedang menunggu revisi.
       assertCanUploadPayment(financing.caseStatus);
 
       // Cegah pencatatan ganda: bukti pembayaran yang sama tidak boleh disimpan dua kali.

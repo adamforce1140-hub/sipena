@@ -27,6 +27,7 @@ const ACTION_LABEL: Record<string, string> = {
   EXPORT_NPF_EXCEL: "Export Laporan Excel",
   EXPORT_NPF_PDF: "Export Laporan PDF",
   UPDATE_USER_STATUS: "Ubah Status Pengguna",
+  CREATE_USER: "Tambah Pengguna",
   RESET_USER_PASSWORD: "Reset Kata Sandi Pengguna",
 };
 

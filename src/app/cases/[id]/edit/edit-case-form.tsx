@@ -4,11 +4,22 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiFetch } from "@/lib/api-client";
 import { FINANCING_PRODUCTS, SHARIAH_TERM } from "@/lib/shariah";
+import { checkCaseCompleteness } from "@/lib/case-completeness";
+import { CaseCompletenessPanel } from "@/components/case-completeness-panel";
 import { Collectibility } from "@prisma/client";
 
 const inputCls =
   "w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none";
 const labelCls = "mb-1 block text-xs font-medium text-gray-700";
+
+const NUMERIC_FIELDS = [
+  "principalAmount",
+  "outstandingBalance",
+  "arrearsMargin",
+  "penaltyAmount",
+  "dpd",
+  "collateralValue",
+];
 
 export type EditableCase = {
   id: string;
@@ -23,6 +34,7 @@ export type EditableCase = {
   collateralType: string | null;
   collateralValue: number | null;
   customer: {
+    cifNumber: string;
     fullName: string;
     nik: string;
     phone: string;
@@ -35,6 +47,37 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({
+    cifNumber: data.customer.cifNumber,
+    fullName: data.customer.fullName,
+    nik: data.customer.nik,
+    phone: data.customer.phone,
+    address: data.customer.address,
+    productType: data.productType,
+    principalAmount: String(data.principalAmount || ""),
+    outstandingBalance: String(data.outstandingBalance || ""),
+    collateralType: data.collateralType ?? "",
+  });
+
+  // Kelengkapan data dipantau langsung saat mengetik; tidak menghalangi simpan.
+  const completeness = checkCaseCompleteness({
+    customer: {
+      cifNumber: values.cifNumber ?? "",
+      fullName: values.fullName ?? "",
+      nik: values.nik ?? "",
+      phone: values.phone ?? "",
+      address: values.address ?? "",
+    },
+    productType: values.productType ?? "",
+    principalAmount: Number(values.principalAmount || 0),
+    outstandingBalance: Number(values.outstandingBalance || 0),
+    collateralType: values.collateralType ?? "",
+  });
+
+  function syncValues(e: React.FormEvent<HTMLFormElement>) {
+    const fd = new FormData(e.currentTarget);
+    setValues(Object.fromEntries(fd.entries()) as Record<string, string>);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -42,22 +85,14 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
     setSubmitting(true);
 
     const fd = new FormData(e.currentTarget);
-    const payload = {
-      fullName: String(fd.get("fullName")),
-      nik: String(fd.get("nik")),
-      phone: String(fd.get("phone")),
-      emergencyContact: fd.get("emergencyContact") ? String(fd.get("emergencyContact")) : null,
-      address: String(fd.get("address")),
-      productType: String(fd.get("productType")),
-      principalAmount: Number(fd.get("principalAmount")),
-      outstandingBalance: Number(fd.get("outstandingBalance")),
-      arrearsMargin: Number(fd.get("arrearsMargin")),
-      penaltyAmount: Number(fd.get("penaltyAmount")),
-      dpd: Number(fd.get("dpd")),
-      collectibility: String(fd.get("collectibility")),
-      collateralType: fd.get("collateralType") ? String(fd.get("collateralType")) : null,
-      collateralValue: fd.get("collateralValue") ? Number(fd.get("collateralValue")) : null,
-    };
+    // Hanya field yang diisi yang dikirim, sehingga data lama tidak terhapus
+    // saat Staf melengkapi sebagian field saja.
+    const payload: Record<string, string | number> = {};
+    for (const [key, value] of Array.from(fd.entries())) {
+      const text = String(value).trim();
+      if (text === "") continue;
+      payload[key] = NUMERIC_FIELDS.includes(key) ? Number(text) : text;
+    }
 
     try {
       await apiFetch(`/api/cases/${data.id}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -70,19 +105,32 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} onChange={syncValues} className="space-y-6">
       {error && (
         <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
+      <CaseCompletenessPanel result={completeness} />
+
       <section className="rounded border bg-white p-5">
         <h2 className="mb-4 text-base font-semibold">Data Nasabah</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
+            <label htmlFor="edit-cifNumber" className={labelCls}>
+              Nomor CIF <span className="text-gray-400">(opsional)</span>
+            </label>
+            <input
+              id="edit-cifNumber"
+              name="cifNumber"
+              defaultValue={data.customer.cifNumber}
+              className={inputCls}
+            />
+          </div>
+          <div>
             <label htmlFor="edit-fullName" className={labelCls}>
-              Nama Lengkap
+              Nama Lengkap *
             </label>
             <input
               id="edit-fullName"
@@ -95,34 +143,32 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
           </div>
           <div>
             <label htmlFor="edit-nik" className={labelCls}>
-              NIK
+              NIK <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-nik"
               name="nik"
               autoComplete="off"
-              defaultValue={data.customer.nik}
-              required
+              defaultValue={data.customer.nik === "-" ? "" : data.customer.nik}
               className={inputCls}
             />
           </div>
           <div>
             <label htmlFor="edit-phone" className={labelCls}>
-              No. Telepon
+              No. Telepon <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-phone"
               name="phone"
               type="tel"
               autoComplete="tel"
-              defaultValue={data.customer.phone}
-              required
+              defaultValue={data.customer.phone === "-" ? "" : data.customer.phone}
               className={inputCls}
             />
           </div>
           <div>
             <label htmlFor="edit-emergencyContact" className={labelCls}>
-              Kontak Darurat
+              Kontak Darurat <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-emergencyContact"
@@ -134,14 +180,13 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
           </div>
           <div className="md:col-span-2">
             <label htmlFor="edit-address" className={labelCls}>
-              Alamat Lengkap
+              Alamat Lengkap <span className="text-gray-400">(opsional)</span>
             </label>
             <textarea
               id="edit-address"
               name="address"
               autoComplete="street-address"
-              defaultValue={data.customer.address}
-              required
+              defaultValue={data.customer.address === "-" ? "" : data.customer.address}
               rows={2}
               className={inputCls}
             />
@@ -166,18 +211,21 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
           </div>
           <div>
             <label htmlFor="edit-productType" className={labelCls}>
-              Akad Pembiayaan
+              Akad Pembiayaan <span className="text-gray-400">(opsional)</span>
             </label>
             <select
               id="edit-productType"
               name="productType"
               defaultValue={data.productType}
               className={inputCls}
-              required
             >
-              {!FINANCING_PRODUCTS.some((p) => p.value === data.productType) && (
-                <option value={data.productType}>{data.productType} (belum sesuai akad - mohon ganti)</option>
-              )}
+              <option value="">-- Pilih Akad --</option>
+              {!FINANCING_PRODUCTS.some((p) => p.value === data.productType) &&
+                data.productType !== "" && (
+                  <option value={data.productType}>
+                    {data.productType} (belum sesuai akad - mohon ganti)
+                  </option>
+                )}
               {FINANCING_PRODUCTS.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
@@ -187,35 +235,33 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
           </div>
           <div>
             <label htmlFor="edit-principalAmount" className={labelCls}>
-              {SHARIAH_TERM.principal} (Rp)
+              {SHARIAH_TERM.principal} (Rp) <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-principalAmount"
               name="principalAmount"
               type="number"
               step="0.01"
-              defaultValue={data.principalAmount}
-              required
+              defaultValue={data.principalAmount || ""}
               className={inputCls}
             />
           </div>
           <div>
             <label htmlFor="edit-outstandingBalance" className={labelCls}>
-              {SHARIAH_TERM.outstanding} (Rp)
+              {SHARIAH_TERM.outstanding} (Rp) <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-outstandingBalance"
               name="outstandingBalance"
               type="number"
               step="0.01"
-              defaultValue={data.outstandingBalance}
-              required
+              defaultValue={data.outstandingBalance || ""}
               className={inputCls}
             />
           </div>
           <div>
             <label htmlFor="edit-arrearsMargin" className={labelCls}>
-              {SHARIAH_TERM.margin} (Rp)
+              {SHARIAH_TERM.margin} (Rp) <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-arrearsMargin"
@@ -223,13 +269,12 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
               type="number"
               step="0.01"
               defaultValue={data.arrearsMargin}
-              required
               className={inputCls}
             />
           </div>
           <div>
             <label htmlFor="edit-penaltyAmount" className={labelCls}>
-              {SHARIAH_TERM.penalty} (Rp)
+              {SHARIAH_TERM.penalty} (Rp) <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-penaltyAmount"
@@ -237,14 +282,13 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
               type="number"
               step="0.01"
               defaultValue={data.penaltyAmount}
-              required
               className={inputCls}
             />
             <p className="mt-1 text-xs text-gray-500">{SHARIAH_TERM.penaltyNote}</p>
           </div>
           <div>
             <label htmlFor="edit-dpd" className={labelCls}>
-              DPD (hari)
+              DPD (hari) <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-dpd"
@@ -252,13 +296,12 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
               type="number"
               min="0"
               defaultValue={data.dpd}
-              required
               className={inputCls}
             />
           </div>
           <div>
             <label htmlFor="edit-collectibility" className={labelCls}>
-              Kolektibilitas
+              Kolektibilitas <span className="text-gray-400">(opsional)</span>
             </label>
             <select
               id="edit-collectibility"
@@ -275,7 +318,7 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
           </div>
           <div>
             <label htmlFor="edit-collateralType" className={labelCls}>
-              Jenis Agunan
+              Jenis Agunan <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-collateralType"
@@ -286,7 +329,7 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
           </div>
           <div>
             <label htmlFor="edit-collateralValue" className={labelCls}>
-              Nilai Agunan (Rp)
+              Nilai Agunan (Rp) <span className="text-gray-400">(opsional)</span>
             </label>
             <input
               id="edit-collateralValue"
@@ -300,7 +343,7 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
         </div>
       </section>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
           disabled={submitting}
@@ -315,6 +358,9 @@ export function EditCaseForm({ data }: { data: EditableCase }) {
         >
           Batal
         </button>
+        <p className="text-xs text-gray-500">
+          Data boleh disimpan walau belum lengkap — kasus tetap bisa diverifikasi Supervisor.
+        </p>
       </div>
     </form>
   );

@@ -54,6 +54,7 @@ export default async function EditCasePage({ params }: { params: { id: string } 
           collateralValue:
             financing.collateralValue === null ? null : Number(financing.collateralValue),
           customer: {
+            cifNumber: financing.customer.cifNumber,
             fullName: financing.customer.fullName,
             nik: financing.customer.nik,
             phone: financing.customer.phone,

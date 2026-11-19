@@ -28,18 +28,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const result = await prisma.$transaction(async (tx) => {
       const financing = await tx.financing.findUnique({
         where: { id: params.id },
-        select: { id: true, caseStatus: true, needsRevision: true },
+        select: { id: true, caseStatus: true },
       });
       if (!financing) {
         throw Object.assign(new Error("Kasus tidak ditemukan."), { status: 404 });
       }
-      // Kasus yang dikembalikan Supervisor harus direvisi dulu; mengajukan solusi
-      // baru akan mereset flag revisi tanpa perbaikan data.
-      if (financing.needsRevision) {
-        throw new TransitionError(
-          "Kasus sedang menunggu revisi Staf. Simpan perbaikan data terlebih dahulu sebelum mengajukan solusi."
-        );
-      }
+      // Solusi tetap boleh diajukan walau kasus sedang menunggu revisi —
+      // Supervisor yang memutuskan, Staf tidak perlu menunggu.
       assertCanProposeSolution(financing.caseStatus);
 
       // Satu kasus hanya boleh punya satu solusi yang menunggu keputusan.

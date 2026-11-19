@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api-client";
 import { formatRupiah, formatDate, formatDateTime, STATUS_LABEL } from "@/lib/ui";
 import { productLabel, productScheme, SHARIAH_TERM } from "@/lib/shariah";
 import { ActivityType, SolutionType, CaseStatus } from "@prisma/client";
+import type { CompletenessResult } from "@/lib/case-completeness";
 import type {
   SerializedCase,
   SerializedCollectionLog,
@@ -519,11 +520,13 @@ function SupervisorGatePanel({
   financingId,
   caseStatus,
   needsRevision,
+  completeness,
   onDone,
 }: {
   financingId: string;
   caseStatus: CaseStatus;
   needsRevision: boolean;
+  completeness: CompletenessResult;
   onDone: () => void;
 }) {
   const { busy, error, success, run } = useAction();
@@ -613,6 +616,31 @@ function SupervisorGatePanel({
         Anda sebagai Supervisor memverifikasi kelengkapan data, kelayakan solusi, dan hasil eksekusi sebelum kasus
         lanjut ke tahap berikutnya.
       </p>
+
+      {/* Ringkasan kelengkapan sebagai bahan verifikasi — tidak memblokir keputusan. */}
+      <div className="mt-3 rounded border border-amber-200 bg-white/70 p-3">
+        <p className="text-xs font-semibold text-gray-800">
+          Kelengkapan data: {completeness.filled}/{completeness.total} ({completeness.percent}%)
+        </p>
+        {completeness.missing.length > 0 ? (
+          <>
+            <p className="mt-1 text-xs text-gray-600">Belum terisi:</p>
+            <ul className="mt-1 flex flex-wrap gap-1.5">
+              {completeness.missing.map((label) => (
+                <li key={label} className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">
+                  {label}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-gray-500">
+              Data belum lengkap tetap dapat diverifikasi; kekurangan menjadi catatan revisi untuk Staf.
+            </p>
+          </>
+        ) : (
+          <p className="mt-1 text-xs text-green-700">Seluruh data utama sudah terisi.</p>
+        )}
+      </div>
+
       {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       {success && <p className="mt-3 rounded bg-green-50 px-3 py-2 text-xs text-green-700">{success}</p>}
       <textarea
@@ -680,15 +708,16 @@ const SOLUTION_STATUS_LABEL: Record<string, string> = {
   REJECTED: "Ditolak",
 };
 
-/** Ditampilkan pada kasus yang dikembalikan Supervisor: Staf harus merevisi data dulu. */
+/** Peringatan (bukan penghalang) pada kasus yang dikembalikan Supervisor. */
 function RevisionNotice({ financingId }: { financingId: string }) {
   return (
-    <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-      Kasus ini dikembalikan Supervisor dan sedang menunggu revisi Anda.{" "}
+    <div className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <strong>Supervisor meminta revisi data.</strong> Anda tetap bisa mencatat aktivitas lapangan seperti
+      biasa.{" "}
       <a href={`/cases/${financingId}/edit`} className="font-semibold underline">
-        Perbaiki data kasus
-      </a>{" "}
-      terlebih dahulu sebelum melanjutkan.
+        Lengkapi / perbaiki data kasus
+      </a>
+      .
     </div>
   );
 }
@@ -710,14 +739,26 @@ export function CaseTabs({
       : "profile"
   );
 
-  // Kasus yang dikembalikan Supervisor (needsRevision) harus direvisi dulu;
-  // form penagihan/solusi/pembayaran disembunyikan agar tidak ditolak API (409).
+  // Simpan tab aktif ke URL agar refresh / bookmark / tombol kembali tidak
+  // selalu memaksa pengguna kembali ke tab Profil.
+  const selectTab = (next: "profile" | "collection" | "solution" | "payment") => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if (next === "profile") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", next);
+    }
+    window.history.replaceState(null, "", url.toString());
+  };
+
+  // Supervisor hanya memverifikasi & memberi keputusan. Staf tetap boleh
+  // mencatat penagihan/solusi/pembayaran walau kasus sedang dikembalikan
+  // untuk revisi — status kasus yang menjadi satu-satunya syarat.
   const canLog =
-    role === "STAFF" &&
-    !data.needsRevision &&
-    (data.caseStatus === "ACTIVE" || data.caseStatus === "IN_EXECUTION");
-  const canPropose = role === "STAFF" && !data.needsRevision && data.caseStatus === "ACTIVE";
-  const canPay = role === "STAFF" && !data.needsRevision && data.caseStatus === "IN_EXECUTION";
+    role === "STAFF" && (data.caseStatus === "ACTIVE" || data.caseStatus === "IN_EXECUTION");
+  const canPropose = role === "STAFF" && data.caseStatus === "ACTIVE";
+  const canPay = role === "STAFF" && data.caseStatus === "IN_EXECUTION";
 
   const approvedSolution = data.solutions.find((s) => s.status === "APPROVED") ?? null;
   const warningLevel =
@@ -742,7 +783,7 @@ export function CaseTabs({
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => selectTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
               tab === t.key
                 ? "border-blue-600 text-blue-700"
@@ -795,11 +836,9 @@ export function CaseTabs({
 
         {tab === "collection" && (
           <div className="space-y-4">
+            {role === "STAFF" && data.needsRevision && <RevisionNotice financingId={data.id} />}
             {canLog && <CollectionLogForm financingId={data.id} onDone={onRefresh} />}
-            {!canLog && role === "STAFF" && data.needsRevision && (
-              <RevisionNotice financingId={data.id} />
-            )}
-            {!canLog && role === "STAFF" && !data.needsRevision && (
+            {!canLog && role === "STAFF" && (
               <p className="rounded border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 Form log penagihan hanya tersedia pada status Aktif atau Eksekusi. Status saat ini:{" "}
                 <strong>{STATUS_LABEL[data.caseStatus]}</strong>.
@@ -874,11 +913,9 @@ export function CaseTabs({
                 Tombol cetak Surat Peringatan tersedia setelah usulan solusi disetujui Supervisor (Gate 2).
               </p>
             )}
+            {role === "STAFF" && data.needsRevision && <RevisionNotice financingId={data.id} />}
             {canPropose && <SolutionForm financingId={data.id} onDone={onRefresh} />}
-            {!canPropose && role === "STAFF" && data.needsRevision && (
-              <RevisionNotice financingId={data.id} />
-            )}
-            {!canPropose && role === "STAFF" && !data.needsRevision && (
+            {!canPropose && role === "STAFF" && (
               <p className="rounded border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 Pengajuan solusi hanya dapat dilakukan saat status <strong>Aktif</strong>. Status saat
                 ini: <strong>{STATUS_LABEL[data.caseStatus]}</strong>.
@@ -953,6 +990,7 @@ export function CaseTabs({
                 </a>
               </div>
             )}
+            {role === "STAFF" && data.needsRevision && <RevisionNotice financingId={data.id} />}
             {canPay && (
               <PaymentForm
                 financingId={data.id}
@@ -962,10 +1000,7 @@ export function CaseTabs({
                 onDone={onRefresh}
               />
             )}
-            {!canPay && role === "STAFF" && data.needsRevision && (
-              <RevisionNotice financingId={data.id} />
-            )}
-            {!canPay && role === "STAFF" && !data.needsRevision && (
+            {!canPay && role === "STAFF" && (
               <p className="rounded border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 Upload bukti pembayaran hanya dapat dilakukan saat status <strong>Eksekusi</strong>.
               </p>

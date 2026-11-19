@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
+import { checkCaseCompleteness } from "@/lib/case-completeness";
 import { CaseTabs, SupervisorGatePanel } from "./case-tabs";
 import type { SerializedCase } from "./types";
 
@@ -17,6 +18,13 @@ export function CaseDetailClient({
 }) {
   const router = useRouter();
   const refresh = () => router.refresh();
+  const completeness = checkCaseCompleteness({
+    customer: data.customer,
+    productType: data.productType,
+    principalAmount: data.principalAmount,
+    outstandingBalance: data.outstandingBalance,
+    collateralType: data.collateralType,
+  });
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
@@ -30,6 +38,7 @@ export function CaseDetailClient({
             financingId={data.id}
             caseStatus={data.caseStatus}
             needsRevision={data.needsRevision}
+            completeness={completeness}
             onDone={refresh}
           />
         ) : (
