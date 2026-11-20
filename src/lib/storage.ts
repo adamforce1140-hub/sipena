@@ -1,27 +1,37 @@
-import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { supabase, STORAGE_BUCKET } from "./supabase";
 
 /**
- * Penyimpanan bukti:
- * - Disk `storage/uploads` (Laragon/dev) atau `STORAGE_DIR` (volume persisten).
- * - URL absolut tetap dibaca lewat HTTP, sehingga penyimpanan objek eksternal
- *   (S3/R2) bisa dipakai tanpa perubahan kode.
+ * Penyimpanan bukti menggunakan Supabase Storage (kompatibel Vercel serverless).
+ * - File disimpan di bucket Supabase Storage
+ * - URL absolut bisa dari storage eksternal lain (S3/R2)
  */
 
-export const UPLOAD_DIR = process.env.STORAGE_DIR
-  ? path.resolve(process.env.STORAGE_DIR)
-  : path.join(process.cwd(), "storage", "uploads");
-
-/** Simpan file; mengembalikan URL publik/relatif untuk diakses ulang. */
+/** Simpan file ke Supabase Storage; mengembalikan URL relatif untuk diakses ulang. */
 export async function saveUpload(name: string, data: Buffer): Promise<string> {
   const safe = safeUploadName(name);
   if (!safe) throw Object.assign(new Error("Nama file tidak valid."), { status: 400 });
-  await mkdir(UPLOAD_DIR, { recursive: true });
-  await writeFile(path.join(UPLOAD_DIR, safe), data);
-  return `/api/files/${safe}`;
+
+  // Generate unique filename dengan timestamp
+  const timestamp = Date.now();
+  const storagePath = `${timestamp}-${safe}`;
+
+  const { error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(storagePath, data, {
+      contentType: getContentType(safe),
+      upsert: false,
+    });
+
+  if (error) {
+    console.error("Supabase Storage upload error:", error);
+    throw Object.assign(new Error("Gagal menyimpan file."), { status: 500 });
+  }
+
+  return `/api/files/${storagePath}`;
 }
 
-/** Baca file dari URL absolut (HTTP) atau dari disk lokal. */
+/** Baca file dari URL absolut (HTTP) atau dari Supabase Storage. */
 export async function readUpload(nameOrUrl: string): Promise<Buffer> {
   if (/^https?:\/\//.test(nameOrUrl)) {
     const res = await fetch(nameOrUrl);
@@ -30,21 +40,37 @@ export async function readUpload(nameOrUrl: string): Promise<Buffer> {
     }
     return Buffer.from(await res.arrayBuffer());
   }
-  const safe = safeUploadName(nameOrUrl);
+
+  const safe = safeUploadName(path.basename(nameOrUrl));
   if (!safe) throw Object.assign(new Error("Nama file tidak valid."), { status: 400 });
-  return readFile(path.join(UPLOAD_DIR, safe));
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .download(safe);
+
+  if (error) {
+    console.error("Supabase Storage download error:", error);
+    throw Object.assign(new Error("File tidak ditemukan di penyimpanan."), { status: 404 });
+  }
+
+  return Buffer.from(await data.arrayBuffer());
 }
 
-/** Hapus file dari URL absolut atau disk lokal (jika nama saja). */
+/** Hapus file dari Supabase Storage. */
 export async function deleteUpload(nameOrUrl: string): Promise<boolean> {
   try {
-    if (/^https?:\/\//.test(nameOrUrl)) {
-      const res = await fetch(nameOrUrl, { method: "DELETE" });
-      return res.ok;
-    }
-    const safe = safeUploadName(nameOrUrl);
+    const filePath = path.basename(nameOrUrl);
+    const safe = safeUploadName(filePath);
     if (!safe) return false;
-    await unlink(path.join(UPLOAD_DIR, safe));
+
+    const { error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .remove([safe]);
+
+    if (error) {
+      console.error("Supabase Storage delete error:", error);
+      return false;
+    }
     return true;
   } catch {
     return false;
@@ -61,4 +87,17 @@ export function safeUploadName(name: string): string | null {
 export function uploadedFileName(url: string | null | undefined): string | null {
   if (!url) return null;
   return safeUploadName(url.split("/").pop() ?? "");
+}
+
+/** Helper: dapatkan Content-Type dari ekstensi file. */
+function getContentType(filename: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  const types: Record<string, string> = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+  };
+  return types[ext] || "application/octet-stream";
 }
