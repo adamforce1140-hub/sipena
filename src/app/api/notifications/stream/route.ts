@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * GET /api/notifications/stream — Server-Sent Events untuk notifikasi real-time.
@@ -13,8 +14,14 @@ export const dynamic = "force-dynamic";
  * pemeriksaan memakan satu perjalanan pulang-pergi (~250 ms). Interval pendek
  * membuat banyak tab/perangkat menghabiskan kuota koneksi dan memicu error
  * "Can't reach database server".
+ *
+ * maxDuration = 60 detik (Vercel Pro). Stream ditutup secara graceful 5 detik
+ * sebelum batas agar client mendapat sinyal reconnect yang bersih, bukan
+ * hard-cut dari serverless timeout.
  */
 const TICK_MS = 15_000;
+const GRACE_MS = 5_000;
+
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
@@ -50,17 +57,24 @@ export async function GET(req: Request) {
       };
 
       const interval = setInterval(tick, TICK_MS);
+
       const cleanup = () => {
         if (closed) return;
         closed = true;
         clearInterval(interval);
+        clearTimeout(timeout);
         try {
           controller.close();
         } catch {
           // sudah tertutup
         }
       };
+
       req.signal?.addEventListener("abort", cleanup);
+
+      // Tutup stream secara graceful sebelum serverless hard timeout.
+      // Client EventSource akan otomatis reconnect ke endpoint ini.
+      const timeout = setTimeout(cleanup, maxDuration * 1000 - GRACE_MS);
 
       send("ready", { userId });
       await tick();
