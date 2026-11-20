@@ -33,12 +33,9 @@ yarn-error.log*
 /backups/
 /storage/
 
-# vercel
-.vercel
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
 .env*
+!.env.example

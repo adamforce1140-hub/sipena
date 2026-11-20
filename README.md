@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SIPENA
 
-## Getting Started
+Sistem manajemen NPF (Non-Per Instalment Financing) internal.
 
-First, run the development server:
+## Stack
+
+- Next.js 14 (App Router) + React 18 + TypeScript
+- Prisma + PostgreSQL (Supabase session pooler)
+- NextAuth v5 (Credentials + JWT session)
+- `@react-pdf/renderer` + PDFKit untuk PDF, `xlsx` untuk Excel
+- Zod untuk validasi input
+
+## Menjalankan secara lokal
 
 ```bash
+npm install
+npm run prisma:generate
+npm run db:push     # atau npm run db:migrate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variabel environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Buat file `.env` (lihat `.env.example`):
 
-## Learn More
+| Variabel | Keterangan |
+| --- | --- |
+| `DATABASE_URL` | Koneksi PostgreSQL/Supabase |
+| `AUTH_SECRET` / `NEXTAUTH_SECRET` | Kunci enkripsi session |
+| `AUTH_TRUST_HOST` | `true` saat berjalan di belakang reverse proxy |
+| `CRON_SECRET` | Token endpoint cron jobs |
+| `DB_POOL_MAX` | Batas koneksi database per instance (isi `1` di serverless) |
+| `STORAGE_DIR` | Lokasi penyimpanan bukti (default `storage/uploads`) |
 
-To learn more about Next.js, take a look at the following resources:
+## Akun awal
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Seed membuat dua akun:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `staff@npf.local` / `password123`
+- `supervisor@npf.local` / `password123`
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Ganti password default sebelum dipakai di lingkungan internal.

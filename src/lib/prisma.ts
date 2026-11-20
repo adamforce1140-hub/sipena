@@ -23,7 +23,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * dari Indonesia ke Sydney). Session pooler (port 5432) tetap mendukung prepared
  * statement dan tetap bisa diakses lewat IPv4, jadi URL otomatis diarahkan ke sana.
  *
- * Di serverless (Vercel) koneksi dibatasi 1 per instance agar kuota session
+ * Di lingkungan serverless koneksi dibatasi 1 per instance agar kuota session
  * pooler Supabase tidak habis saat fungsi dijalankan paralel.
  */
 function normalizeDatabaseUrl(raw: string | undefined) {
@@ -42,7 +42,11 @@ function normalizeDatabaseUrl(raw: string | undefined) {
   }
 
   if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "20");
-  if (process.env.VERCEL) url.searchParams.set("connection_limit", "1");
+
+  // Batas koneksi per instance. Di serverless nilainya 1 supaya kuota session
+  // pooler Supabase tidak habis saat fungsi dijalankan paralel.
+  const poolMax = process.env.DB_POOL_MAX;
+  if (poolMax) url.searchParams.set("connection_limit", poolMax);
 
   return url.toString();
 }
