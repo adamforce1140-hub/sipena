@@ -82,16 +82,6 @@ export default function LoginForm() {
           </span>
         ) : "Masuk"}
       </button>
-
-      <div className="rounded bg-gray-50 p-3 text-xs text-gray-600 space-y-1">
-        <p className="font-semibold text-gray-700">Kredensial Demo:</p>
-        <p>
-          <span className="font-medium">Staff:</span> staff@npf.local / password123
-        </p>
-        <p>
-          <span className="font-medium">Supervisor:</span> supervisor@npf.local / password123
-        </p>
-      </div>
     </form>
   );
 }
