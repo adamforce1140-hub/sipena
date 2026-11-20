@@ -6,11 +6,14 @@ const globalForPrisma = globalThis as unknown as {
 
 /** Error koneksi yang sifatnya sementara (jaringan / pooler Supabase sibuk). */
 const RETRYABLE_CODES = new Set(["P1001", "P1017", "P2024"]);
+const RETRYABLE_MESSAGES = ["EMAXCONN", "EMAXCONNSESSION"];
 const MAX_RETRY = 2;
 
 function isRetryable(error: unknown) {
   const code = (error as { code?: unknown } | null)?.code;
-  return typeof code === "string" && RETRYABLE_CODES.has(code);
+  if (typeof code === "string" && RETRYABLE_CODES.has(code)) return true;
+  const msg = String((error as { message?: unknown } | null)?.message ?? "");
+  return RETRYABLE_MESSAGES.some((m) => msg.includes(m));
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -18,13 +21,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * Normalisasi URL Supabase.
  *
- * Transaction pooler (port 6543 + `pgbouncer=true`) mematikan prepared statement,
- * sehingga setiap query menjadi ~5x lebih lambat (terukur 1,2 detik vs 0,24 detik
- * dari Indonesia ke Sydney). Session pooler (port 5432) tetap mendukung prepared
- * statement dan tetap bisa diakses lewat IPv4, jadi URL otomatis diarahkan ke sana.
+ * Serverless (Vercel/Lambda): pakai transaction pooler (port 6543) dengan
+ * `pgbouncer=true` agar Prisma tidak mengirim prepared statements (tidak
+ * kompatibel dengan transaction mode). Transaction pooler dirancang untuk
+ * ratusan koneksi konkuren — cocok untuk serverless.
  *
- * Di lingkungan serverless koneksi dibatasi 1 per instance agar kuota session
- * pooler Supabase tidak habis saat fungsi dijalankan paralel.
+ * Lokal: pakai session pooler (port 5432) agar prepared statements aktif
+ * dan query lebih cepat (~5x).
  */
 function normalizeDatabaseUrl(raw: string | undefined) {
   if (!raw) return raw;
@@ -36,17 +39,25 @@ function normalizeDatabaseUrl(raw: string | undefined) {
     return raw;
   }
 
-  if (url.hostname.endsWith("pooler.supabase.com") && url.port === "6543") {
-    url.port = "5432";
-    url.searchParams.delete("pgbouncer");
+  const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+  if (url.hostname.endsWith("pooler.supabase.com")) {
+    if (isServerless) {
+      // Serverless: paksa transaction pooler + pgbouncer mode
+      url.port = "6543";
+      url.searchParams.set("pgbouncer", "true");
+    } else {
+      // Lokal: paksa session pooler untuk prepared statements
+      url.port = "5432";
+      url.searchParams.delete("pgbouncer");
+    }
   }
 
   if (!url.searchParams.has("connect_timeout")) url.searchParams.set("connect_timeout", "20");
 
-  // Batas koneksi per instance. Di serverless nilainya 1 supaya kuota session
-  // pooler Supabase tidak habis saat fungsi dijalankan paralel.
-  const poolMax = process.env.DB_POOL_MAX;
-  if (poolMax) url.searchParams.set("connection_limit", poolMax);
+  // Batasi 1 koneksi per instance di serverless agar tidak membebani pooler
+  const poolMax = process.env.DB_POOL_MAX || (isServerless ? "1" : "5");
+  url.searchParams.set("connection_limit", poolMax);
 
   return url.toString();
 }
